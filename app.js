@@ -1,5 +1,7 @@
 const STORAGE_KEY = "tv_tasks_config_v1";
 
+const API_BASE = "https://tasklist-backend-8eky.onrender.com";
+
 function loadConfig() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) {
@@ -167,19 +169,31 @@ function renderDevicesActions() {
 
 // envoi de la commande HTTP vers la prise
 function sendCommand(device, cmd) {
-  const url = `http://${device.ip}/cm?cmnd=Power%20${cmd}`;
-  console.log("Envoi commande :", url);
+  let action;
 
-  // On envoie la requête mais on n'a pas forcément besoin de lire la réponse
-  fetch(url)
-    .then(() => {
-      alert(`Commande ${cmd} envoyée à ${device.name}`);
+  if (cmd === "On") {
+    action = "on";
+  } else if (cmd === "Off") {
+    action = "off";
+  } else {
+    action = "logical";
+  }
+
+  fetch(`${API_BASE}/api/tv/${action}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" }
+  })
+    .then(res => res.json())
+    .then(data => {
+      console.log("Réponse backend:", data);
+      alert(`Commande ${action} envoyée via Render`);
     })
     .catch(err => {
       console.error(err);
-      alert("Erreur lors de l'envoi de la commande.\nVérifie que ton téléphone/PC est sur le même Wi-Fi que la prise.");
+      alert("Erreur en contactant le backend Render");
     });
 }
+
 
 // ----- rendu de la page CONFIG -----
 
