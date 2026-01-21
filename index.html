@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>TV & Tâches</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>TV & Tâches</h1>
+    <nav>
+      <button id="tab-today">Aujourd'hui</button>
+      <button id="tab-config">Configuration</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Onglet AUJOURD'HUI -->
+    <section id="page-today" class="page">
+      <h2>Tâches du jour</h2>
+      <div id="tasks-today"></div>
+      <button id="reset-day">Réinitialiser les tâches pour aujourd'hui</button>
+
+      <h2>Prises</h2>
+      <div id="devices-actions"></div>
+      <p class="hint">
+        La commande part directement vers la prise (IP locale).  
+        Le site ne voit pas ta TV, il ne fait qu’envoyer la requête.
+      </p>
+    </section>
+
+    <!-- Onglet CONFIG -->
+    <section id="page-config" class="page hidden">
+      <h2>Configuration des prises</h2>
+      <div id="devices-list"></div>
+
+      <h3>Ajouter / modifier une prise</h3>
+      <form id="device-form">
+        <input type="hidden" id="device-id" />
+        <label>
+          Nom de la prise :
+          <input type="text" id="device-name" required />
+        </label>
+        <label>
+          IP locale de la prise :
+          <input type="text" id="device-ip" placeholder="192.168.1.42" required />
+        </label>
+        <label>
+          Mode :
+          <select id="device-mode">
+            <option value="reward">Récompense (ON seulement si tâches faites)</option>
+            <option value="punishment">Punition (OFF tant que tâches pas faites)</option>
+          </select>
+        </label>
+        <button type="submit">Enregistrer la prise</button>
+      </form>
+
+      <hr />
+
+      <h2>Configuration des tâches</h2>
+      <div id="tasks-list"></div>
+
+      <h3>Ajouter / modifier une tâche</h3>
+      <form id="task-form">
+        <input type="hidden" id="task-id" />
+        <label>
+          Nom de la tâche :
+          <input type="text" id="task-name" required />
+        </label>
+        <label>
+          Fréquence :
+          <select id="task-frequency">
+            <option value="daily">Quotidienne</option>
+          </select>
+        </label>
+        <button type="submit">Enregistrer la tâche</button>
+      </form>
+    </section>
+  </main>
+
+  <footer>
+    <small>Prototype local - données stockées dans ce navigateur.</small>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
