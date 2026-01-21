@@ -8,7 +8,8 @@ function loadConfig() {
     // config par défaut si rien n'existe
     const defaultConfig = {
       devices: [
-        { id: "1", name: "TV salon", ip: "192.168.1.144", mode: "reward" }
+        // ⚠️ plus d'IP en cloud-only : on utilise un identifiant "deviceName"
+        { id: "1", name: "TV salon", deviceName: "prise_salon", mode: "reward" }
       ],
       tasks: [
         { id: "1", name: "Vaisselle", frequency: "daily" },
@@ -20,7 +21,19 @@ function loadConfig() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultConfig));
     return defaultConfig;
   }
-  return JSON.parse(raw);
+
+  // migration légère : si un ancien device a "ip" mais pas "deviceName"
+  const cfg = JSON.parse(raw);
+  if (cfg.devices) {
+    cfg.devices.forEach(d => {
+      if (!d.deviceName) {
+        // si l'utilisateur avait mis une IP, on ne peut pas deviner le deviceName
+        // donc on met un placeholder à compléter dans l'onglet config
+        d.deviceName = d.deviceName || "";
+      }
+    });
+  }
+  return cfg;
 }
 
 function saveConfig(cfg) {
@@ -129,10 +142,12 @@ function renderDevicesActions() {
         : "Tâches incomplètes → TV coupée (punition)";
     }
 
+    const deviceName = device.deviceName || "(à configurer)";
+
     card.innerHTML = `
       <h3>${device.name}</h3>
       <p class="device-status">${statusText}</p>
-      <p>IP : ${device.ip} — mode : ${device.mode}</p>
+      <p>Device : <strong>${deviceName}</strong> — mode : ${device.mode}</p>
       <button class="btn-small" data-action="on">Forcer ON</button>
       <button class="btn-small" data-action="off">Forcer OFF</button>
       <button class="btn-small" data-action="logical">Action logique</button>
@@ -142,55 +157,53 @@ function renderDevicesActions() {
 
     const [btnOn, btnOff, btnLogical] = card.querySelectorAll("button");
 
-    // Forcer ON / OFF (bypass logique)
-    btnOn.addEventListener("click", () => sendCommand(device, "On"));
-    btnOff.addEventListener("click", () => sendCommand(device, "Off"));
+    btnOn.addEventListener("click", () => sendCommand(device, "on"));
+    btnOff.addEventListener("click", () => sendCommand(device, "off"));
 
-    // bouton "logique" (respecte le mode reward/punishment)
     btnLogical.addEventListener("click", () => {
       if (device.mode === "reward") {
         if (!tasksOk) {
           alert("Pas de TV : toutes les tâches ne sont pas faites.");
           return;
         }
-        sendCommand(device, "On");
+        sendCommand(device, "on");
       } else if (device.mode === "punishment") {
         if (!tasksOk) {
-          // punition : on coupe
-          sendCommand(device, "Off");
+          sendCommand(device, "off");
         } else {
-          // récompense : on laisse allumer
-          sendCommand(device, "On");
+          sendCommand(device, "on");
         }
       }
     });
   });
 }
 
-// envoi de la commande HTTP vers la prise
-function sendCommand(device, cmd) {
-  let action;
-
-  if (cmd === "On") {
-    action = "on";
-  } else if (cmd === "Off") {
-    action = "off";
-  } else {
-    action = "logical";
+// --- CLOUD ONLY: envoi de commande au backend, qui publie en MQTT ---
+function sendCommand(device, action) {
+  if (!device.deviceName) {
+    alert("Ce device n'a pas de 'deviceName'. Va dans l'onglet Config et remplis-le (ex: prise_salon).");
+    return;
   }
 
-  fetch(`${API_BASE}/api/tv/${action}`, {
+  fetch(`${API_BASE}/api/devices/${encodeURIComponent(device.deviceName)}/command`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" }
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action }) // "on" | "off" | "logical"
   })
-    .then(res => res.json())
+    .then(async res => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      return data;
+    })
     .then(data => {
       console.log("Réponse backend:", data);
-      alert(`Commande ${action} envoyée via Render`);
+      alert(`Commande '${action}' envoyée au backend (cloud)`);
     })
     .catch(err => {
       console.error(err);
-      alert("Erreur en contactant le backend Render");
+      alert(`Erreur backend: ${err.message}`);
     });
 }
 
@@ -203,7 +216,7 @@ const tasksListDiv = document.getElementById("tasks-list");
 const deviceForm = document.getElementById("device-form");
 const deviceIdInput = document.getElementById("device-id");
 const deviceNameInput = document.getElementById("device-name");
-const deviceIpInput = document.getElementById("device-ip");
+const deviceIpInput = document.getElementById("device-ip"); // ⚠️ on le réutilise pour deviceName
 const deviceModeSelect = document.getElementById("device-mode");
 
 const taskForm = document.getElementById("task-form");
@@ -219,7 +232,7 @@ function renderConfig() {
     card.className = "card";
     card.innerHTML = `
       <strong>${dev.name}</strong><br/>
-      IP : ${dev.ip} — mode : ${dev.mode}<br/>
+      Device : ${dev.deviceName || "(vide)"} — mode : ${dev.mode}<br/>
       <button class="btn-small" data-action="edit">Éditer</button>
       <button class="btn-small" data-action="delete">Supprimer</button>
     `;
@@ -230,7 +243,10 @@ function renderConfig() {
     btnEdit.addEventListener("click", () => {
       deviceIdInput.value = dev.id;
       deviceNameInput.value = dev.name;
-      deviceIpInput.value = dev.ip;
+
+      // ⚠️ champ "device-ip" devient "deviceName" (ex: prise_salon)
+      deviceIpInput.value = dev.deviceName || "";
+
       deviceModeSelect.value = dev.mode;
     });
 
@@ -279,12 +295,17 @@ deviceForm.addEventListener("submit", e => {
   e.preventDefault();
   const id = deviceIdInput.value || Date.now().toString();
   const existing = state.devices.find(d => d.id === id);
+
   const dev = {
     id,
     name: deviceNameInput.value.trim(),
-    ip: deviceIpInput.value.trim(),
+
+    // ⚠️ champ "device-ip" devient "deviceName"
+    deviceName: deviceIpInput.value.trim(),
+
     mode: deviceModeSelect.value
   };
+
   if (existing) {
     Object.assign(existing, dev);
   } else {
